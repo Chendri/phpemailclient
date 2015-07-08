@@ -1,3 +1,4 @@
+
 <?php echo quoted_printable_decode($body)?>
 
 <div class="container">
