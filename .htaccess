@@ -1,6 +1,10 @@
-<IfModule authz_core_module>
-    Require all denied
-</IfModule>
+# <IfModule authz_core_module>
+    # Require all denied
+# </IfModule>
 <IfModule !authz_core_module>
-    Deny from all
+order allow,deny
+<Files ~ "\.(js|css)$">
+   allow from all
+</Files>
 </IfModule>
+
