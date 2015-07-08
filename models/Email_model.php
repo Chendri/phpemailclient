@@ -15,4 +15,8 @@ class Email_model extends CI_Model{
       $client = open_stream();
       return fetch_message($client,$msgno); 
    }
+   public function send_message($to, $subject, $message)
+   {
+      return(mail($to, $subject, $message));
+   }
 }
