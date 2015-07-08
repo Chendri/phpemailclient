@@ -55,4 +55,14 @@ class Email extends MY_Controller{
       $data = $this->email_model->read_message($uid);
       $this->load->view('email/read_message', $data);
    }
+
+   public function delete_messages(){
+      $checked_messages = $this->input->post('checked_messages');
+      if(!empty($checked_messages))
+      {
+         $this->email_model->delete_messages($checked_messages);
+         exit("Messages deleted");
+      }
+      exit("No messages checked");
+   }
 }

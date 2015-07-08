@@ -37,6 +37,30 @@ if(!function_exists("fetch_message"))
    }
 }
 
+if(!function_exists('mark_for_deletion'))
+{
+   function mark_for_deletion($client, $checked_messages)
+   {
+      foreach($checked_messages as $message)
+      {
+         imap_delete($client, $message);
+      }
+   }
+}
+
+if(!function_exists('delete_messages'))
+{
+   function delete_messages($client, $checked_messages = '')
+   {
+      if(!empty($checked_messages))
+      {
+         mark_for_deletion($client, $checked_messages);
+      }
+      return imap_expunge($client);
+   }
+}
+
+//Proccesses inline attachments
 if(!function_exists("process_inline"))
 {
    function process_inline($emailMessage)
@@ -78,7 +102,7 @@ if(!function_exists("compose_message"))
       $boundary         = md5(rand());
       $boundary_content = md5(rand());
 
-      $headers  = ''.$rn;
+      $headers  = 'From:'.$rn;
       $headers .= 'Mime-version: 1.0'.$rn;
       $headers .= 'Content-Type: multipart/related;boundary='.$boundary.$rn;
 

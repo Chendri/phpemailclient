@@ -1,6 +1,5 @@
 <?php
 class Email_model extends CI_Model{
-   private $client = NULL;
    public function __construct(){
       $this->load->helper('email');
    }
@@ -25,5 +24,10 @@ class Email_model extends CI_Model{
       $headers = $results['headers'];
 
       return(mail($to, $subject, $message, $headers));
+   }
+
+   public function delete_messages($checked_messages)
+   {
+      delete_messages(open_stream(), $checked_messages);
    }
 }
