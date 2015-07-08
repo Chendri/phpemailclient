@@ -6,7 +6,7 @@
    </thead>
    <tbody>
    <?php foreach($emails as $email):?>
-   <tr class="clickable-row" data-href="<?php echo base_url('email').'/read_message/'.$email->uid?>">
+   <tr class="clickable-row" data-href="<?php echo base_url('email').'/read_message/'.$email->msgno?>">
       <td><?php echo $email->from?></td>
       <td><?php echo $email->subject?></td>
       <td><a href="<?php echo base_url('index.php/email').'/read_message/'.$email->uid?>">test</a></td>

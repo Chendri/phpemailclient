@@ -11,8 +11,8 @@ class Email_model extends CI_Model{
       $client = open_stream();
       return fetch_inbox($client);
    }
-   public function read_message($uid){
+   public function read_message($msgno){
       $client = open_stream();
-      return fetch_message($client,$uid); 
+      return fetch_message($client,$msgno); 
    }
 }
