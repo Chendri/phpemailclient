@@ -8,8 +8,8 @@ if(!function_exists("open_stream"))
       //Having some certification problem, going to deal with it later.
       $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX';
       //DEBUG SETTINGS
-      $username = '';
-      $password = '';
+      $username = 'example@example.com';
+      $password = 'password';
 
       return imap_open($hostname, $username, $password);
    }
@@ -102,7 +102,8 @@ if(!function_exists("compose_message"))
       $boundary         = md5(rand());
       $boundary_content = md5(rand());
 
-      $headers  = 'From:'.$rn;
+      //Set up headers
+      $headers  = 'From:example <example@example.com>'.$rn;
       $headers .= 'Mime-version: 1.0'.$rn;
       $headers .= 'Content-Type: multipart/related;boundary='.$boundary.$rn;
 
@@ -118,15 +119,18 @@ if(!function_exists("compose_message"))
 
       $headers .= $rn;
 
+      //Set up body
       $msg  = $rn . '--' . $boundary . $rn;
       $msg .= 'Content-Type: multipart/alternative;'.$rn;
       $msg .= " boundary=\"$boundary_content\"".$rn;
 
 
+      //Plain text
       $msg .= $rn . '--' . $boundary_content  . $rn;
       $msg .= 'Content-Type: text/plain; charset=ISO-8859-1'.$rn;
       $msg .= strip_tags($content);
 
+      //HTML
       $msg .= $rn . '--' . $boundary_content  . $rn;
       $msg .= 'Content-Type: text/html; charset=ISO-8859-1'.$rn;
       $msg .= 'Content-Transfer-Encoding: quoted-printable'.$rn;
@@ -183,7 +187,15 @@ if(!function_exists('process_attachments'))
       {
          //Something went wrong with upload, report the error
          //TODO: create a view specifically for reporting this error
-         exit($upload_status['error']);
+         $error_message =$upload_status['error'];
+         if(strpos($error_message, 'You did not select a file to upload.') === FALSE)
+         {
+            exit($error_message);
+         }
+         else
+         {
+            return '';
+         }
       }
       else
       {
