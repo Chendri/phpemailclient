@@ -19,17 +19,35 @@ class Email extends MY_Controller{
 
    public function send_message()
    {
-      $message = $this->input->post("message");
-      $to      = $this->input->post("recipient");
-      $subject = $this->input->post("subject");
-      if($this->email_model->send_message($to, $subject, $message))
+      //Set up form validation rules
+      $this->load->library('form_validation');
+
+      $this->form_validation->set_rules('message', 'Message', 'required');
+      $this->form_validation->set_rules('recipient', 'Recipient', 'required|valid_emails');
+      $this->form_validation->set_rules('subject', 'Subject', 'required');
+
+      if($this->form_validation->run() == FALSE)
       {
+         //Form validation failed, display errors
          $this->load->view('email/write_message');
       }
       else
       {
-         //TODO generate a proper error
-         exit("something went wrong");
+         //Form input checks out, get values and send them to the model
+         $message = $this->input->post("message");
+         $to      = $this->input->post("recipient");
+         $subject = $this->input->post("subject");
+
+         if($this->email_model->send_message($to, $subject, $message))
+         {
+            //Email was sent, return to message writer
+            $this->load->view('email/write_message');
+         }
+         else
+         {
+            //TODO generate a proper error
+            exit("something went wrong");
+         }
       }
    }
 
