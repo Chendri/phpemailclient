@@ -5,8 +5,8 @@ if(!function_exists("open_stream"))
    {
       //Having some certification problem, going to deal with it later.
       $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX';
-      $username = 'blitsyclienttest@gmail.com';
-      $password = 'blitsytest';
+      $username = '';
+      $password = '';
 
       return imap_open($hostname, $username, $password);
    }
