@@ -12,6 +12,11 @@ class Email extends MY_Controller{
       $this->load->view('email/inbox', $data);
    }
 
+   public function debug($id){
+      $data = $this->email_model->get_debug_info($id);
+
+      $this->load->view('email/debug', $data);
+   }
    public function write_message()
    {
       $this->load->view('email/write_message');

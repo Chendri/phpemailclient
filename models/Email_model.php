@@ -30,4 +30,9 @@ class Email_model extends CI_Model{
    {
       delete_messages(open_stream(), $checked_messages);
    }
+
+   public function get_debug_info($id)
+   {
+      return debug_info($id);
+   }
 }

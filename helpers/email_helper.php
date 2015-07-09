@@ -27,11 +27,22 @@ if(!function_exists("fetch_message"))
 {
    function fetch_message($client, $msgno)
    {
-      $emailMessage                     = new EmailMessage($client, $msgno);
-      $emailMessage->fetch();
-      process_inline($emailMessage);
+      $structure = imap_fetchstructure($client, $msgno);
 
-      $data['body'] = $emailMessage->bodyHTML;
+      if($structure->type)
+      {
+         //The message is not just plaintext
+         $emailMessage                     = new EmailMessage($client, $msgno);
+         $emailMessage->fetch();
+         process_inline($emailMessage);
+         $data['body'] = $emailMessage->bodyHTML;
+      }
+      else
+      {
+         //The message is plaintext
+         $data['body'] = imap_fetchbody($client, $msgno, 1);
+      }
+
 
       return($data);
    }
@@ -257,5 +268,18 @@ if(!function_exists("prepare_attatchment"))
       } else {
          return false;
       }
+   }
+}
+if(!function_exists('debug_info'))
+{
+   function debug_info($id)
+   {
+      $client = open_stream();
+
+      $data['header'] = imap_fetchheader($client, $id);
+      $data['body'] = imap_fetchbody($client, $id, '');
+      $data['structure'] = imap_fetchstructure($client, $id);
+
+      return $data;
    }
 }

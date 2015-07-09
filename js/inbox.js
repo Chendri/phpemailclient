@@ -6,6 +6,10 @@ jQuery(document).ready(function($) {
    $("#select-all").change(function(){
       $(".select-row").prop('checked',$(this).prop("checked"));
    });
+   $(".date-row").each(function(){
+      var date = $(this).attr('data-date');
+      $(this).text(format_date(date));
+   });
 
 });
 
@@ -29,4 +33,8 @@ function delete_messages(){
          location.reload();
       }
    });
+}
+function format_date(date){
+   var d1 = new Date(date);
+   return d1.toLocaleDateString();
 }
