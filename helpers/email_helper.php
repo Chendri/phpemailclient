@@ -1,28 +1,279 @@
 <?php
 require 'application/third_party/EmailMessage.php';
 //TODO Have the email client read off of some config file only reachable by the server
-if(!function_exists("open_stream"))
+if(!function_exists("get_login_info"))
 {
-   function open_stream($username = '', $password='')
+   function get_login_info()
+   {
+      $data['username'] = 'exmaple@example.com';
+      $data['password'] = 'example';
+
+      return $data;
+   }
+}
+
+if(!function_exists("open_inbox"))
+{
+   function open_inbox($username = '', $password='')
    {
       //Having some certification problem, going to deal with it later.
-      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX';
-      //DEBUG SETTINGS
-      $username = 'example@example.com';
-      $password = 'password';
+      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}[Gmail]/All Mail';
+      $data = get_login_info();
+      return imap_open($hostname, $data['username'], $data['password']);
+   }
+}
 
-      return imap_open($hostname, $username, $password);
+if(!function_exists("open_sent_folder"))
+{
+   function open_sent_mailbox()
+   {
+      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}Sent Messages';
+
+      $data = get_login_info();
+   }
+}
+if(!function_exists('open_all'))
+{
+   function open_all()
+   {
+      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}[Gmail]/All Mail';
+      $data = get_login_info();
+      return imap_open($hostname, $data['username'], $data['password']);
    }
 }
 if(!function_exists("fetch_inbox"))
 {
-   function fetch_inbox($client)
+   function fetch_inbox()
    {
-      $MC = imap_check($client);
+      $client = open_all();
+      $thread = imap_thread($client);
 
-      return imap_fetch_overview($client, "1:{$MC->Nmsgs}",0);
+      do{
+         $cur_val = current($thread);
+         $cur_key = key($thread);
+
+         $tree = explode('.', $cur_key);
+         if($tree[1] == 'num' && $cur_val){
+
+            $branch = new SplDoublyLinkedList();
+            // $branch->push(imap_headerinfo($client, $cur_val));
+
+            if(next($thread))
+            {
+               $next_val = current($thread);
+               if($next_val && $next_val != 6)
+               {
+                  //Get the whole conversation subset and reverse it.
+                  $end_branch_key = $tree[0].'.branch';
+                  $key_array = array_keys($thread);
+
+                  $offset = array_search($cur_key, $key_array);
+
+                  $branch_key_subest = array_slice($key_array, $offset, (array_search( $end_branch_key, $key_array)-$offset)+1);
+
+                  // $limb = array_reverse(array_intersect_key($thread, array_flip($branch_key_subest)));
+                  $limb = array_intersect_key($thread, array_flip($branch_key_subest));
+                  // exit(var_dump($limb));
+
+                  $data['branch'] = branch_recurse($client, $limb, $branch);
+
+                  $CG = get_instance();
+                  $CG->load->view('email/debug.php', $data);
+               }
+            }   
+         }
+      }while(next($thread) !== FALSE);
+      return $data;
    }
 }
+if(!function_exists("branch_recurse"))
+{
+   function branch_recurse($client, $limb, $branch, $key = '')
+   {
+      if(!empty($key))
+      {
+         if(empty($limb[$key]))
+         {
+            return array('message' => 'end_of_limb', 'this_branch' => $branch);
+         }
+         $cur_val = $limb[$key];
+         $cur_key = $key;
+      }
+      else
+      {
+         $cur_val = current($limb);
+         $cur_key = key($limb);
+      }
+
+      next($limb);
+      $next_key = key($limb);
+
+      $cur_tag = explode('.', $cur_key);
+
+      switch($cur_tag[1]){
+      case 'branch':
+         if($cur_val)
+         {
+            exit($next_key);
+            //Sibling branches present
+            $sibling_key = $cur_val.'.num';
+
+            $sibling_branch = new SplDoublyLinkedList();
+            $sibling_branch = branch_recurse($client, $limb,$sibling_branch,  $sibling_key);
+
+            $data = array('message' => 'sibling_found', 'this_branch' => $branch, 'sibling_branch' => $sibling_branch);
+
+            return $data;
+         }
+         else
+         {
+             $data = array('message' => 'no_siblings', 'this_branch' => $branch);
+             return $data;
+         }
+         break;
+      case 'next':
+         if($cur_val)
+         {
+
+            //There are still more values in this branch
+            $child_results = branch_recurse($client, $limb, $branch,$next_key);
+         
+            $self_results  = branch_recurse($client, $limb, $branch, $cur_tag[0].'.branch');
+
+            if(!empty($child_results['message']) && $child_results['message'] == 'sibling_found')
+            {
+               $temp_branch = new SplDoublyLinkedList();
+               $temp_branch->push($child_results['this_branch']);
+               $temp_branch->push($child_results['sibling_branch']);
+
+               $self_results['message']     = "branch_finish";
+               $self_results['this_branch'] = $temp_branch;
+            }
+
+            return $self_results;
+         }
+         else
+         {
+            //The branch ends here, check for siblings
+            return branch_recurse($client, $limb, $branch,$next_key);
+         }
+         break;
+      case 'num':
+         if($cur_val)
+         {
+            $results = branch_recurse($client, $limb, $branch,$next_key);
+            if(!empty($results['message']))
+            {
+               switch($results['message']){
+               case 'branch_finish':
+                  $temp_branch = $results['this_branch'];
+                  $temp_branch->unshift($cur_val);
+                  $branch->push($temp_branch);
+                  break;
+               case 'sibling_found':
+                  $results['this_branch']->push($cur_val);
+                  return $results;
+                  break;
+               case 'end_of_limb':
+                  return $results;
+                  break;
+               }
+            }
+         }
+         break;
+      }
+   }
+}
+// if(!function_exists("branch_recurse"))
+// {
+//    function branch_recurse($client, $limb, $branch, $root_tag)
+//    {
+//       $cur_val = current($limb);
+//       $cur_key = key($limb);
+//
+//       $cur_tag = explode('.', $cur_key);
+//
+//       if($cur_tag[1] == 'branch')
+//       {
+//          $next_val = next($limb);
+//          $next_tag = explode('.', key($limb));
+//
+//          if($next_tag[1] != 'branch')
+//          {
+//             prev($limb);
+//             $temp_branch = new SplDoublyLinkedList();
+//
+//             while($next_tag[1] != 'branch' && next($limb) !== FALSE)
+//             {
+//                $next_val = current($limb);
+//                $next_tag = explode('.', key($limb));
+//
+//                if($next_tag[1] == 'num')
+//                {
+//                   if($next_val)
+//                   {
+//                      // $temp_branch->unshift(imap_fetchheader($client, $next_val));
+//                      $branch->unshift($next_tag[0]);
+//                   }
+//                }
+//             }
+//             return $branch;
+//          }
+//          else
+//          {
+//             $next_val = next($limb);
+//             $next_tag = explode('.', key($limb));
+//
+//             if($next_tag[1] != 'branch')
+//             {
+//                if($next_tag[1] == 'next')
+//                {
+//                   $temp_branch = new SplDoublyLinkedList();
+//                   while($next_tag[1] != 'branch' && next($limb) !== FALSE)
+//                   {
+//                      $next_val = current($limb);
+//                      $next_tag = explode('.', key($limb));
+//
+//                      if($next_tag[1] == 'num')
+//                      {
+//                         if($next_val)
+//                         {
+//                            // $temp_branch->unshift(imap_fetchheader($client, $next_val));
+//                            $temp_branch->unshift($next_tag[0]);
+//                         }
+//                      }
+//                   }
+//                   if(current($limb))
+//                   {
+//                      $branch->unshift($temp_branch);
+//                      $branch = branch_recurse($client, $limb, $branch, $root_tag);
+//                   }
+//                   else
+//                   {
+//                      while($temp_branch->valid())
+//                      {
+//                         //This seems inefficient, might want to try and see if there's a 
+//                         //way to just append the whole list, or look for another way to temporarily store the values
+//                         $branch->unshift($temp_branch->pop());
+//                      }
+//                   }
+//                   return $branch;
+//                }
+//                prev($limb);
+//             }
+//             else{
+//                prev($limb);
+//                $branch = branch_recurse($client, $limb, $branch, $root_tag);
+//                return $branch;
+//             }
+//          }
+//       }
+//       else{
+//          exit($cur_val);
+//       }
+//
+//    }
+// }
 if(!function_exists("fetch_message"))
 {
    function fetch_message($client, $msgno)
@@ -114,7 +365,7 @@ if(!function_exists("compose_message"))
       $boundary_content = md5(rand());
 
       //Set up headers
-      $headers  = 'From:example <example@example.com>'.$rn;
+      $headers  = 'From: exmaple  <example@example.com>'.$rn;
       $headers .= 'Mime-version: 1.0'.$rn;
       $headers .= 'Content-Type: multipart/related;boundary='.$boundary.$rn;
 
@@ -272,13 +523,14 @@ if(!function_exists("prepare_attatchment"))
 }
 if(!function_exists('debug_info'))
 {
-   function debug_info($id)
+   function debug_info($client, $id)
    {
-      $client = open_stream();
 
-      $data['header'] = imap_fetchheader($client, $id);
-      $data['body'] = imap_fetchbody($client, $id, '');
-      $data['structure'] = imap_fetchstructure($client, $id);
+      $data['header']           = imap_fetchheader($client, $id);
+      $data['body']             = imap_fetchbody($client, $id, '');
+      $data['structure']        = imap_fetchstructure($client, $id);
+      $data['folders']          = imap_getmailboxes($client, '{imap.gmail.com:993/imap/ssl/novalidate-cert}','*');
+      $data['threads']           = imap_thread($client);
 
       return $data;
    }

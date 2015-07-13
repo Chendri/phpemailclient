@@ -11,6 +11,16 @@ jQuery(document).ready(function($) {
       $(this).text(format_date(date));
    });
 
+   $('.accordion-body').on('shown.bs.collapse', function () {
+      var pHeader = '#' + $(this).data('parent');
+      $(pHeader + " i.indicator").removeClass("glyphicon-chevron-up").addClass("glyphicon-chevron-down");
+   });
+
+   $('.accordion-body').on('hidden.bs.collapse', function () {
+      var pHeader = '#' + $(this).data('parent');
+      $(pHeader + " i.indicator").removeClass("glyphicon-chevron-down").addClass("glyphicon-chevron-up");
+   });
+
 });
 
 function delete_messages(){

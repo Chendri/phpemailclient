@@ -1,24 +1,76 @@
 <div class="container">
 
-<?php echo '<pre>';var_dump($emails[0]);'</pre>';?>
+
 <!--Inbox table  -->
 Select all: <input type="checkbox" id="select-all"></input>
-<table style="width:auto" class="table table-striped table-hover table-condensed">
+<table class="table table-striped table-hover table-condensed">
    <thead>
       <th class="col-xs-2"></th>
       <th>Date Received</th>
       <th>From</th>
       <th>Subject</th>
+      <th></th>
    </thead>
    <tbody>
-   <?php foreach($emails as $email):?>
-   <tr>
-      <td><input type="checkbox" class="checkbox select-row" data-msgno="<?php echo $email->msgno?>"</td>
 
-      <td style="cursor:pointer;" class="date-row clickable-row" data-date="<?php echo $email->date?>" data-href="<?php echo base_url('email').'/read_message/'.$email->msgno?>"></td>
-      <td style="cursor:pointer;" class="clickable-row" data-href="<?php echo base_url('email').'/read_message/'.$email->msgno?>"><?php echo $email->from?></td>
-      <td style="cursor:pointer;" class="clickable-row" data-href="<?php echo base_url('email').'/read_message/'.$email->msgno?>"><?php echo $email->subject?></td>
-   </tr>
+   <?php foreach($emails as $branch):?>
+<?php
+   $branch->rewind();
+   $head = $branch->current();//Get the head of the email branch
+   $msgno = trim($head->Msgno);
+   // exit(var_dump($head));
+   if($branch->count() > 1){
+      $branch->next(); 
+   echo "<tr class='accordion-toggle' data-toggle='collapse' data-target='#$msgno-thread' id='$msgno'>
+
+         <td><input type='checkbox' class='checkbox select-row' data-Msgno='$msgno'</td>
+
+         <td style='cursor:pointer;' class='date-row clickable-row' data-date='$head->date' data-href='".base_url('email')."/read_message/$msgno'></td>
+         <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$msgno'>$head->fromaddress</td>
+         <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$msgno'>$head->subject</td>
+
+         <td><i class='indicator glyphicon glyphicon-chevron-down pull-right'></i></td> 
+      </tr>";
+echo "<tr> 
+         <td class='hidden-row'>
+            <div class='accordion-body collapse in' id='$msgno-thread' data-parent='$msgno'>
+               <table class='table table-striped table-bordered table-hover'>
+                  <thead>
+                     <tr>
+                        <th>Date</th>
+                        <th>From</th>
+                     </tr>
+                  </thead>
+                  <tbody>";
+   do{
+   $current = $branch->current();
+
+   $msgno = trim($current->Msgno);
+   echo "<tr>
+            <td style='cursor:pointer;' class='date-row clickable-row' data-date='$head->date' data-href='".base_url('email')."/read_message/$msgno'></td>
+            <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$msgno'>$current->fromaddress</td>
+
+         </tr>";
+   $branch->next();
+   }while($branch->valid());
+   echo "</tbody>
+      </table>
+   </div>
+   </td>
+   </tr>";
+}
+else{
+   echo "<tr>
+      <td><input type='checkbox' class='checkbox select-row' data-Msgno='$msgno'</td>
+
+      <td style='cursor:pointer;' class='date-row clickable-row' data-date='$head->date' data-href='".base_url('email')."/read_message/$msgno'></td>
+      <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$msgno'>$head->fromaddress</td>
+      <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$msgno'>$head->subject</td>
+
+      <td><i class='indicator glyphicon glyphicon-chevron-down pull-right'></i></td> 
+
+      </tr>";
+}?>
    <?php endforeach;?>
    </tbody>
 </table>
