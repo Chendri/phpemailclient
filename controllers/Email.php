@@ -9,7 +9,7 @@ class Email extends MY_Controller{
 
    public function index(){
       $data['emails'] = $this->email_model->fetch_inbox();
-      // $this->load->view('email/inbox', $data);
+      $this->load->view('email/inbox', $data);
    }
 
    public function debug($id){

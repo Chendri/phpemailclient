@@ -15,10 +15,12 @@ Select all: <input type="checkbox" id="select-all"></input>
 
    <?php foreach($emails as $branch):?>
 <?php
+if($branch->count() > 0)
+{
    $branch->rewind();
    $head = $branch->current();//Get the head of the email branch
    $msgno = trim($head->Msgno);
-   // exit(var_dump($head));
+
    if($branch->count() > 1){
       $branch->next(); 
    echo "<tr class='accordion-toggle' data-toggle='collapse' data-target='#$msgno-thread' id='$msgno'>
@@ -70,6 +72,7 @@ else{
       <td><i class='indicator glyphicon glyphicon-chevron-down pull-right'></i></td> 
 
       </tr>";
+}
 }?>
    <?php endforeach;?>
    </tbody>
