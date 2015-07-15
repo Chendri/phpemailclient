@@ -5,8 +5,8 @@ if(!function_exists("get_login_info"))
 {
    function get_login_info()
    {
-      $data['username'] = 'exmple@exmple.com';
-      $data['password'] = 'exmple';
+      $data['username'] = 'example@gmail.com';
+      $data['password'] = 'example';
 
       return $data;
    }
@@ -17,7 +17,7 @@ if(!function_exists("open_inbox"))
    function open_inbox($username = '', $password='')
    {
       //Having some certification problem, going to deal with it later.
-      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}[Gmail]/All Mail';
+      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}INBOX';
       $data = get_login_info();
       return imap_open($hostname, $data['username'], $data['password']);
    }
@@ -25,11 +25,12 @@ if(!function_exists("open_inbox"))
 
 if(!function_exists("open_sent_folder"))
 {
-   function open_sent_mailbox()
+   function open_sent_folder()
    {
-      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}Sent Messages';
+      $hostname = '{imap.gmail.com:993/imap/ssl/novalidate-cert}[Gmail]/Sent Mail';
 
       $data = get_login_info();
+      return imap_open($hostname, $data['username'], $data['password']);
    }
 }
 if(!function_exists('open_all'))
@@ -41,54 +42,136 @@ if(!function_exists('open_all'))
       return imap_open($hostname, $data['username'], $data['password']);
    }
 }
+
+if(!function_exists('check_conversation'))
+{
+   function check_conversation($header, $imap, &$blacklist=null)
+   {
+      $threads = array();
+
+      $subject = $header->subject;
+
+      $msg_ids          = array();//Message id's
+      $reply_ids        = array();//Id's contained in in_reply_to
+
+      $temp_reply_ids   = array();//Temporary storage for ID's that may or may not be replies
+      $temp_msg_ids     = array();//Temporary storage for Id's that may or may not be the main message
+
+      $msg_ids[$header->message_id] = strtotime($header->date);
+
+      //remove re: and fwd:
+      $subject = trim(preg_replace("/Re\:|re\:|RE\:|Fwd\:|fwd\:|FWD\:/i", '', $subject));
+      
+      //search for subject in current mailbox
+      $results = imap_search($imap,  'SUBJECT "'.$subject.'"', SE_UID);
+
+      //because results can be false
+      if(is_array($results)) {
+         //now get all the emails details that were found
+         $emails = imap_fetch_overview($imap, implode(',', $results), FT_UID);
+
+         //foreach email
+         foreach ($emails as $email) {
+               if(isset($email->in_reply_to) && isset($msg_ids[$email->in_reply_to]))
+               {
+                  //add to threads
+                  //we date date as the key because later we will sort it
+                  $key = strtotime($email->date);
+                  $threads[$key] = $email;
+                  $msg_ids[$email->message_id]     = $key;
+                  $reply_ids[$email->in_reply_to]  = $key;
+
+                  if(!is_null($blacklist))
+                  {
+                     $blacklist[$email->message_id] = true;
+                  }
+               }
+               elseif(!isset($email->in_reply_to))
+               {
+                  $key = strtotime($email->date);
+                  $temp_msg_ids[$email->message_id] = array('date' => $key, 'email' => $email);
+
+               }
+               else{
+                  $key = strtotime($email->date);
+                  $temp_reply_ids[$email->message_id] = array('date' => $key, 'email' => $email);
+               }
+         }
+         foreach($temp_reply_ids as $reply_id => $val)
+         {
+            if(isset($msg_ids[$reply_id]))
+            {
+               $date = $val['date'];
+               $email = $val['email'];
+
+               unset($temp_reply_ids[$reply_id]);
+
+               $reply_ids[$email->in_reply_to]  = $date;
+               $threads[$date] = $email;
+               if(!is_null($blacklist))
+               {
+                  $blacklist[$email->message_id] = true;
+               }
+               reset($temp_reply_ids);
+            }
+         }
+         foreach($temp_msg_ids as $msg_id => $val)
+         {
+            if(isset($reply_ids[$msg_id]))
+            {
+               $date = $val['date'];
+               $email = $val['email'];
+
+               if(!is_null($blacklist))
+               {
+                  $blacklist[$email->message_id] = true;
+               }
+               $threads[$date] = $email;
+               break;
+            }
+         }
+      }
+
+      //sort keys so we get threads in chronological order
+      ksort($threads);
+
+      return($threads);
+   }
+}
 if(!function_exists("fetch_inbox"))
 {
-   function fetch_inbox()
+   function fetch_inbox($client)
    {
-      $client = open_all();
-      $thread = imap_thread($client);
+      //TODO clean this up, imap_thread isn't necessary
+      $thread = imap_thread($client, SE_UID);
+      $blacklist = array();//Array containing message id's of emails that have already been searched
 
       do{
          $cur_val = current($thread);
          $cur_key = key($thread);
 
          $tree = explode('.', $cur_key);
+         $subject = '';
          if($tree[1] == 'num' && $cur_val){
+            $header = imap_fetch_overview($client, $cur_val, FT_UID)[0];
 
-            $branch = new SplDoublyLinkedList();
-            $branch->push(imap_headerinfo($client, $cur_val));
+            next($thread);
 
-            if(next($thread))
+            if(!isset($blacklist[$header->message_id]))
             {
-               $next_val = current($thread);
-               if($next_val)
+               $blacklist[$header->message_id] = true;
+
+               $imap = open_all();
+
+               $results = check_conversation($header, $imap, $blacklist);
+
+               if($results)
                {
-                  //Get the whole conversation subset and reverse it.
-                  $end_branch_key = $tree[0].'.branch';
-                  $key_array = array_keys($thread);
-
-                  $offset = array_search($cur_key, $key_array);
-
-                  $branch_key_subest = array_slice($key_array, $offset, (array_search( $end_branch_key, $key_array)-$offset)+1);
-
-                  // $limb = array_reverse(array_intersect_key($thread, array_flip($branch_key_subest)));
-                  $limb = array_intersect_key($thread, array_flip($branch_key_subest));
-
-                  do{
-                     next($thread);
-                     $next_val = current($limb);
-                     $next_tag = explode('.', key($limb));
-                     if($next_tag[1] == 'num')
-                     {
-                        $branch->push(imap_headerinfo($client, $next_val));
-                     }
-
-
-                  }while(next($limb) !== FALSE);
-
+                  $header = reset($results);
                }
+
+               $data[$header->message_id] = $header;
             }
-            $data[$cur_val] = $branch;
          }
       }while(next($thread) !== FALSE);
       return $data;
@@ -97,24 +180,40 @@ if(!function_exists("fetch_inbox"))
 
 if(!function_exists("fetch_message"))
 {
-   function fetch_message($client, $msgno)
+   /*
+      Returns formatted message bodies
+      and processes their attachments.
+    */
+   function fetch_message($client, $uid)
    {
-      $structure = imap_fetchstructure($client, $msgno);
+      $structure = imap_fetchstructure($client, $uid,  FT_UID);
 
+      //Check if email is plaintext or MIME type
       if($structure->type)
       {
          //The message is not just plaintext
-         $emailMessage                     = new EmailMessage($client, $msgno);
+         $emailMessage                     = new EmailMessage($client, $uid);
          $emailMessage->fetch();
          process_inline($emailMessage);
-         $data['body'] = $emailMessage->bodyHTML;
+         $data = $emailMessage->bodyHTML;
       }
       else
       {
-         //The message is plaintext
-         $data['body'] = imap_fetchbody($client, $msgno, 1);
-      }
+         //Is the message a reply?
+         $is_reply = imap_fetch_overview($client, $uid, FT_UID)[0]->in_reply_to;
 
+         //The message is plaintext
+         if(!$is_reply)
+         {
+            $data = imap_fetchbody($client, $uid, 1, FT_UID);
+         }
+         else{
+            // Message is a reply, need to format returned value
+            $data  = imap_fetchbody($client, $uid, 1, FT_UID);
+            $data  = preg_replace('/> On/', '<br/><div> > On', $data);
+            $data .= '</div>';
+         }
+      }
 
       return($data);
    }
@@ -178,7 +277,7 @@ if(!function_exists("process_inline"))
 
 if(!function_exists("compose_message"))
 {
-   function compose_message($to, $subject, $content, $path = '', $cc = '', $bcc = '', $_headers = false)
+   function compose_message($to, $subject, $content, $path = '', $is_reply = false, $cc = '', $bcc = '', $_headers = false)
    {
       $rn = "\r\n";
 
@@ -186,7 +285,12 @@ if(!function_exists("compose_message"))
       $boundary_content = md5(rand());
 
       //Set up headers
-      $headers  = 'From: exmple client test  <exmple@exmple.com>'.$rn;
+      $headers  = 'From: example client test  <example@gmail.com>'.$rn;
+      if($is_reply)
+      {
+         $headers .= 'Reply-To: '.$to.$rn;
+         $headers .='In-Reply-To: '.$is_reply.$rn;
+      }
       $headers .= 'Mime-version: 1.0'.$rn;
       $headers .= 'Content-Type: multipart/related;boundary='.$boundary.$rn;
 
@@ -346,13 +450,61 @@ if(!function_exists('debug_info'))
 {
    function debug_info($client, $id)
    {
-
-      $data['header']           = imap_fetchheader($client, $id);
-      $data['body']             = imap_fetchbody($client, $id, '');
-      $data['structure']        = imap_fetchstructure($client, $id);
+      // $data['header']           = imap_fetchheader($client, $id, FT_UID);
+      // $data['body']             = imap_fetchbody($client, $id, '', FT_UID);
+      // $data['structure']        = imap_fetchstructure($client, $id, FT_UID);
       $data['folders']          = imap_getmailboxes($client, '{imap.gmail.com:993/imap/ssl/novalidate-cert}','*');
-      $data['threads']           = imap_thread($client);
+      $data['threads']           = imap_thread($client, SE_UID);
 
       return $data;
    }
 }
+
+// function create_thread_structure($client, $limb)
+// {
+//    $root_val = current($limb);
+//    $root_tag = explode('.', key($limb));
+//
+//    $structure = array();
+//    while(next($limb) !== FALSE){
+//       $cur_val = current($limb);
+//       $cur_key = key($limb);
+//       $cur_tag = explode('.', $cur_key);
+//
+//       if($cur_tag[1] == 'branch')
+//       {
+//          if($cur_val && $cur_val != 19)
+//          {
+//             $end_branch_key = $cur_tag[0].'.num';
+//             $key_array = array_keys($limb);
+//
+//             $offset = array_search($cur_key, $key_array);
+//
+//             $branch_key_subest = array_slice($key_array, $offset, (array_search( $end_branch_key, $key_array)-$offset)+1);
+//
+//             $sub_limb = array_intersect_key($limb, array_flip($branch_key_subest));
+//
+//
+//             array_unshift($structure,create_thread_structure($client, $sub_limb));
+//
+//             $limb = array_diff_key($limb, $sub_limb);
+//
+//          }
+//       }
+//       elseif($cur_tag[1] == 'num')
+//       {
+//
+//          array_unshift($structure, imap_headerinfo($client, $cur_val));
+//
+//          unset($limb[$cur_key]);
+//          reset($limb);
+//
+//          if($cur_tag[0] == $root_tag[0])
+//          {
+//             return $structure;
+//          }
+//       }
+//    }
+//    return $structure;
+// }
+

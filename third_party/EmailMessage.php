@@ -20,7 +20,7 @@ class EmailMessage {
 
 	public function fetch() {
 		
-		$structure = @imap_fetchstructure($this->connection, $this->messageNumber);
+		$structure = @imap_fetchstructure($this->connection, $this->messageNumber,FT_UID);
 		if(!$structure) {
 			return false;
 		}
@@ -95,7 +95,7 @@ class EmailMessage {
 	
 	function getPart($partNumber, $encoding) {
 
-		$data = imap_fetchbody($this->connection, $this->messageNumber, $partNumber);
+		$data = imap_fetchbody($this->connection, $this->messageNumber, $partNumber,  FT_UID);
 		switch($encoding) {
 			case 0: return $data; // 7BIT
 			case 1: return $data; // 8BIT
