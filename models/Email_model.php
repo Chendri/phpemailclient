@@ -26,10 +26,11 @@ class Email_model extends CI_Model{
 
       $client = $this->session->all_client;
 
-      $header              = imap_fetch_overview($client, $uid, FT_UID)[0];
-      $data['body']         = $this->retrieve_message($uid, $client);
+      $header                   = imap_fetch_overview($client, $uid, FT_UID)[0];
+      $data['body']             = $this->retrieve_message($uid, $client);
+      $data['header']           = $header;
 
-      $data['reply_chain']  = check_conversation($header, $client);
+      $data['reply_chain']      = check_conversation($header, $client);
 
       return $data; 
    }

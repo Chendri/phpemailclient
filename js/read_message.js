@@ -29,15 +29,26 @@ function Retrieve_Message(el, action)
          $(el).html(data);
          //I"ll probably do this whole thing differently in the future.
          $(el).ready(function(){
+            var gmail   = $(el).find("div[class*='gmail']");
+            var block   = $(el).find("blockquote");
+            if(gmail.length)
+            {
+               gmail.first().removeClass('in');
 
-            $(el).children("div[dir!='ltr']").addClass('collapse');
-            $(el).children("div[dir!='ltr']").attr('id',$(el).attr('id')+'_reply-chain');
+               gmail.first().addClass('collapse');
+            }
+            if(block.length){
+               block.first().removeClass('in');
 
-            //This is just a temporary fix until I find a better solution
-            $(el).children(':only-child').removeClass('collapse');
+               block.first().addClass('collapse');
+            }
 
-            $(el).children("div[dir='ltr']").children("div[dir!='ltr']").addClass('collapse');
-            $(el).children("div[dir='ltr']").children("div[dir!='ltr']").attr('id', $(el).attr('id')+'_reply-chain');
+            var collapse = $(el).find(".collapse");
+            if(collapse.length){
+               collapse.first().attr('id', $(el).attr('id')+'_reply-chain');
+               $(el).find(".collapse:gt(0)").removeClass("collapse");
+               $(el).next().removeClass("hidden");
+            }
          });
          }
       });

@@ -10,8 +10,8 @@
 <div class='list-group-item'>
    <div class='message' data-href='<?php echo base_url().'email/retrieve_message/'.$reply->uid?>' id='<?php echo $reply->uid?>'><?php echo $reply->subject?></br></div>
 
-   <?php if($key > 0):?>
-      <i class="glyphicon glyphicon-plus no-hide" data-toggle='collapse' href='#<?php echo $reply->uid."_reply-chain"?>'></i><br/>
+   <?php if(isset($reply->in_reply_to)):?>
+      <i class="glyphicon glyphicon-plus hidden" id='icon-<?php echo $reply->uid;?>'data-toggle='collapse' href='#<?php echo $reply->uid."_reply-chain"?>'></i><br/>
    <?php endif;?>
 </div>
 <?php endforeach;?>
@@ -22,8 +22,18 @@
 <?php echo $body ?>
 <?endif;?>
 <?php 
-preg_match('/\<([^<>]+)\>/', $first->from, $match);
-$to = preg_replace('/[<>]+/', '', $match[0]);
+if($first)
+{
+   preg_match('/\<([^<>]+)\>/', $first->from, $match);
+   $to = preg_replace('/[<>]+/', '', $match[0]);
+}
+else
+{
+   preg_match('/\<([^<>]+)\>/', $header->from, $match);
+   $to = preg_replace('/[<>]+/', '', $match[0]);
+   $last = $header;
+   $first = $header;
+}
 ?>
    <?php echo form_open_multipart("email/send_reply/$uid", array('role' => 'form', 'class' => 'form-horizontal'))?>
 

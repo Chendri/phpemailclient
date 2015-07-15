@@ -138,6 +138,7 @@ if(!function_exists('check_conversation'))
       return($threads);
    }
 }
+
 if(!function_exists("fetch_inbox"))
 {
    function fetch_inbox($client)
@@ -196,22 +197,30 @@ if(!function_exists("fetch_message"))
          $emailMessage->fetch();
          process_inline($emailMessage);
          $data = $emailMessage->bodyHTML;
+         if(preg_match('/>\s\t*On/im', $data))
+         {
+            $data  = preg_replace('/>\s\t*On/im', '<br/><div class="collapse"> > On', $data);
+            $data .= '</div>';
+         }
       }
       else
       {
          //Is the message a reply?
-         $is_reply = imap_fetch_overview($client, $uid, FT_UID)[0]->in_reply_to;
+         $email_header = imap_fetch_overview($client, $uid, FT_UID)[0];
 
          //The message is plaintext
-         if(!$is_reply)
+         if(!isset($email_header->in_reply_to))
          {
             $data = imap_fetchbody($client, $uid, 1, FT_UID);
          }
          else{
             // Message is a reply, need to format returned value
             $data  = imap_fetchbody($client, $uid, 1, FT_UID);
-            $data  = preg_replace('/> On/', '<br/><div> > On', $data);
-            $data .= '</div>';
+            if(preg_match('/>\s\t*On/im', $data))
+            {
+               $data  = preg_replace('/>\s\t*On/im', '<br/><div class="collapse"> > On', $data);
+               $data .= '</div>';
+            }
          }
       }
 
@@ -285,7 +294,7 @@ if(!function_exists("compose_message"))
       $boundary_content = md5(rand());
 
       //Set up headers
-      $headers  = 'From: example client test  <example@gmail.com>'.$rn;
+      $headers  = 'From: example Client Test  <example@gmail.com>'.$rn;
       if($is_reply)
       {
          $headers .= 'Reply-To: '.$to.$rn;
@@ -450,9 +459,9 @@ if(!function_exists('debug_info'))
 {
    function debug_info($client, $id)
    {
-      // $data['header']           = imap_fetchheader($client, $id, FT_UID);
-      // $data['body']             = imap_fetchbody($client, $id, '', FT_UID);
-      // $data['structure']        = imap_fetchstructure($client, $id, FT_UID);
+      $data['header']           = imap_fetchheader($client, $id, FT_UID);
+      $data['body']             = imap_fetchbody($client, $id, '', FT_UID);
+      $data['structure']        = imap_fetchstructure($client, $id, FT_UID);
       $data['folders']          = imap_getmailboxes($client, '{imap.gmail.com:993/imap/ssl/novalidate-cert}','*');
       $data['threads']           = imap_thread($client, SE_UID);
 
