@@ -43,139 +43,193 @@ if(!function_exists('open_all'))
    }
 }
 
-if(!function_exists('check_conversation'))
+if(!function_exists('perform_query'))
 {
-   function check_conversation($header, $imap, &$blacklist=null)
+   function perform_query($table, $lookup = '')
    {
-      $threads = array();
+      $CG = get_instance();
+      if(!empty($lookup) && is_array($lookup))
+      {
+         $CG->db->where($lookup);
+      }
+      $query = $CG->db->get($table);
+      if($query->num_rows() > 0)
+      {
+         return $query->result();
+      }
+      else
+      {
+         return FALSE;
+      }
+   }
+}
+if(!function_exists('search'))
+{
+   function search($search)
+   {
+      //Builds a basic search using from, to, subject, and tag fields
+      if(gettype($search) != 'string')
+      {
+         exit("Search needs to be a string");
+      }
 
-      $subject = $header->subject;
+      $CG = get_instance();
+      $CG->db->like('from', $search);
+      $CG->db->or_like('to', $search);
+      $CG->db->or_like('subject', $search);
+      $CG->db->or_like('email_tags.tag_name', $search);
+      $CG->db->join('email_tag_x', 'email_tag_x.access_id = messages.access_id');
+      $CG->db->join('email_tags', 'email_tags.id = email_tag_x.tag_id');
+   }
+}
+if(!function_exists('check_messages'))
+{
+   function check_messages($options = "UNSEEN"){
+      $client = open_all();
+      $CG = get_instance();
 
-      $msg_ids          = array();//Message id's
-      $reply_ids        = array();//Id's contained in in_reply_to
+      $mailcheck = imap_check($client);
 
-      $temp_reply_ids   = array();//Temporary storage for ID's that may or may not be replies
-      $temp_msg_ids     = array();//Temporary storage for Id's that may or may not be the main message
+      $srch = imap_search($client, $options);
 
-      $msg_ids[$header->message_id] = strtotime($header->date);
+      if($srch !== FALSE)
+      {
+         $emails = imap_fetch_overview($client, implode(',', $srch),0);
 
-      //remove re: and fwd:
-      $subject = trim(preg_replace("/Re\:|re\:|RE\:|Fwd\:|fwd\:|FWD\:/i", '', $subject));
-      
-      //search for subject in current mailbox
-      $results = imap_search($imap,  'SUBJECT "'.$subject.'"', SE_UID);
-
-      //because results can be false
-      if(is_array($results)) {
-         //now get all the emails details that were found
-         $emails = imap_fetch_overview($imap, implode(',', $results), FT_UID);
-
-         //foreach email
-         foreach ($emails as $email) {
-               if(isset($email->in_reply_to) && isset($msg_ids[$email->in_reply_to]))
-               {
-                  //add to threads
-                  //we date date as the key because later we will sort it
-                  $key = strtotime($email->date);
-                  $threads[$key] = $email;
-                  $msg_ids[$email->message_id]     = $key;
-                  $reply_ids[$email->in_reply_to]  = $key;
-
-                  if(!is_null($blacklist))
-                  {
-                     $blacklist[$email->message_id] = true;
-                  }
-               }
-               elseif(!isset($email->in_reply_to))
-               {
-                  $key = strtotime($email->date);
-                  $temp_msg_ids[$email->message_id] = array('date' => $key, 'email' => $email);
-
-               }
-               else{
-                  $key = strtotime($email->date);
-                  $temp_reply_ids[$email->message_id] = array('date' => $key, 'email' => $email);
-               }
-         }
-         foreach($temp_reply_ids as $reply_id => $val)
+         foreach($emails as $email)
          {
-            if(isset($msg_ids[$reply_id]))
+            $message_id = $email->message_id;
+            $check_query = $CG->db->get_where('messages', array('message_id' => $message_id));
+            if($check_query->num_rows() == 0)
             {
-               $date = $val['date'];
-               $email = $val['email'];
-
-               unset($temp_reply_ids[$reply_id]);
-
-               $reply_ids[$email->in_reply_to]  = $date;
-               $threads[$date] = $email;
-               if(!is_null($blacklist))
-               {
-                  $blacklist[$email->message_id] = true;
-               }
-               reset($temp_reply_ids);
-            }
-         }
-         foreach($temp_msg_ids as $msg_id => $val)
-         {
-            if(isset($reply_ids[$msg_id]))
-            {
-               $date = $val['date'];
-               $email = $val['email'];
-
-               if(!is_null($blacklist))
-               {
-                  $blacklist[$email->message_id] = true;
-               }
-               $threads[$date] = $email;
-               break;
+               $uid = $email->uid;
+               $body = fetch_message($client, $uid);
+               add_to_inbox($client, $email, $body);
             }
          }
       }
+   }
+}
 
-      //sort keys so we get threads in chronological order
-      ksort($threads);
+if(!function_exists('add_to_inbox'))
+{
+   function add_to_inbox($client, $header, $body)
+   {
+      $CG = get_instance();
 
-      return($threads);
+      $data = array(
+         'uid'          => $header->uid,
+         'message_id'   => $header->message_id,
+         'body'         => quoted_printable_decode($body),
+         'subject'      => $header->subject,
+         'date'         => date("Y-m-d H:i:s",strtotime($header->date)),
+         'from'         => $header->from,
+         'to'           => $header->to
+      );
+      $to_fix = array();
+      if(isset($header->in_reply_to))
+      {
+         $parent = $header->in_reply_to;
+         while(true){
+            $query = $CG->db->get_where('messages', array('message_id' => $parent));
+            if($query->num_rows() > 0)
+            {
+               if(!is_null($query->row()->parent))
+               {
+                  $parent = $query->row()->parent;
+
+                  $query = $CG->db->get_where('messages', array('message_id' => $parent));
+                  if($query->num_rows() > 0)
+                  {
+                     if(!is_null($query->row()->parent))
+                     {
+                        $to_fix[] = $query->row()->message_id;
+                     }
+                  }
+               }
+               else{
+                  break;
+               }
+            }
+            else{
+               break;
+            }
+         }
+
+         foreach($to_fix as $msgid)
+         {
+            $CG->db->set('parent', $parent);
+            $CG->db->where('message_id', $msgid);
+            $CG->db->update('messages');
+         }
+
+         $data['parent'] = $parent;
+      }
+
+      $CG->db->insert('messages', $data);
+      $id = $CG->db->insert_id();
+
+      $CG->db->insert('email_tag_x', array('access_id' => $id, 'tag_id' => 1));
    }
 }
 
 if(!function_exists("fetch_inbox"))
 {
-   function fetch_inbox($client)
+   function fetch_inbox($search='')
    {
-      //TODO clean this up, imap_thread isn't necessary
-      $thread = imap_thread($client, SE_UID);
-      $blacklist = array();//Array containing message id's of emails that have already been searched
+      $CG = get_instance();
 
-      do{
-         $cur_val = current($thread);
-         $cur_key = key($thread);
+      $CG->db->where('parent', null);
+      $CG->db->from('messages');
 
-         $tree = explode('.', $cur_key);
-         $subject = '';
-         if($tree[1] == 'num' && $cur_val){
-            $header = imap_fetch_overview($client, $cur_val, FT_UID)[0];
+      if(!empty($search))
+      {
+         search($search);
+      }
 
-            next($thread);
+      $query = $CG->db->get();
+      if($query->num_rows() > 0)
+      {
+         return $query->result();
+      }
+      else
+      {
+         exit("no emails!");
+      }
+   }
+}
+if(!function_exists("entry_exists"))
+{
+   function entry_exists($table, $col, $value)
+   {
+      $CG = get_instance();
+      return ($CG->db->get_where($table, array($col => $value))->num_rows() > 0);
+   }
+}
+if(!function_exists("get_conversation"))
+{
+   function get_conversation($access_id)
+   {
+      $CG = get_instance();
 
-            if(!isset($blacklist[$header->message_id]))
-            {
-               $blacklist[$header->message_id] = true;
+      if(entry_exists('messages', 'access_id', $access_id))
+      {
+         $msgid = $CG->db->get_where('messages', array('access_id'=> $access_id))->row()->message_id;
 
-               $imap = open_all();
+         $CG->db->where('parent', $msgid);
+         $CG->db->or_where('message_id', $msgid);
+         $CG->db->order_by('date ASC');
+         $query = $CG->db->get('messages');
 
-               $results = check_conversation($header, $imap, $blacklist);
-
-               if($results)
-               {
-                  $header = reset($results);
-               }
-
-               $data[$header->message_id] = $header;
-            }
+         if($query->num_rows() > 0)
+         {
+            return $query->result();
          }
-      }while(next($thread) !== FALSE);
-      return $data;
+         else
+         {
+            exit('invalid message id');
+         }
+      }
    }
 }
 
@@ -197,11 +251,6 @@ if(!function_exists("fetch_message"))
          $emailMessage->fetch();
          process_inline($emailMessage);
          $data = $emailMessage->bodyHTML;
-         if(preg_match('/>\s\t*On/im', $data))
-         {
-            $data  = preg_replace('/>\s\t*On/im', '<br/><div class="collapse"> > On', $data);
-            $data .= '</div>';
-         }
       }
       else
       {
@@ -234,7 +283,27 @@ if(!function_exists('mark_for_deletion'))
    {
       foreach($checked_messages as $message)
       {
-         imap_delete($client, $message);
+         $CG = get_instance();
+         if(entry_exists('messages','access_id', $message)){
+
+            $email = $CG->db->get_where('messages', array('access_id' => $message))->row();
+
+            if(isset($email->uid))
+            {
+               //Delete it off the server
+               imap_delete($client, $email->uid, FT_UID);
+
+               //Delete message and all its children
+               $CG->db->where('access_id', $message);
+               $CG->db->or_where('parent', $email->message_id);
+               $CG->db->delete('messages');
+
+               //Delete message's tag lookups
+               //TODO:Delete message's children's tag lookups
+               $CG->db->where('access_id', $message);
+               $CG->db->delete('email_tag_x');
+            }
+         }
       }
    }
 }
@@ -243,6 +312,8 @@ if(!function_exists('delete_messages'))
 {
    function delete_messages($client, $checked_messages = '')
    {
+      //NOTE:Client must ALWAYS be the client used to store UID's on the database, otherwise
+      //this function may delete the wrong messages
       if(!empty($checked_messages))
       {
          mark_for_deletion($client, $checked_messages);

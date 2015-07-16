@@ -8,8 +8,8 @@ class Email extends MY_Controller{
    }
 
    public function index(){
-      $this->email_model->open_stream();
       $data['emails'] = $this->email_model->fetch_inbox();
+      $data['groups'] = $this->email_model->fetch_groups();
       $this->load->view('email/inbox', $data);
    }
    
@@ -105,12 +105,65 @@ class Email extends MY_Controller{
       exit(quoted_printable_decode($this->email_model->retrieve_message($msgno)));
 
    }
-   public function read_message($uid){
-      $data = $this->email_model->read_message($uid);
-      $data['uid'] = $uid;
+   public function read_message($msgid){
+      $data = $this->email_model->read_message($msgid);
+      $data['uid'] = $msgid;
       $this->load->view('email/read_message', $data);
    }
 
+   public function search(){
+      if(!is_null($this->input->post('search_text')))
+      {
+         $search = $this->input->post('search_text');
+
+         $this->email_model->search($search);
+
+         $this->index();
+      }
+   }
+   public function new_tag(){
+      $this->load->library('form_validation');
+
+      $this->form_validation->set_rules('tag_name', 'Tag Name', 'required');
+      //TODO Add rule for unique tag name
+
+      if($this->form_validation->run() == FALSE)
+      {
+         $this->load->view('email/inbox');
+      }
+      else{
+         $tag_name = $this->input->post('tag_name');
+
+         if($this->email_model->new_tag($tag_name))
+         {
+            $this->index();
+         }
+         else{
+            exit('Something went wrong');
+         }
+      }
+   }
+   public function add_to_group()
+   {
+      $checked_messages = $this->input->post('checked_messages');
+      $tag_name         = $this->input->post('tag_name');
+
+      $this->email_model->add_to_group($checked_messages, $tag_name);
+      exit('finished');
+   }
+   public function remove_from_group()
+   {
+      $checked_messages = $this->input->post('checked_messages');
+      $tag_name         = $this->input->post('tag_name');
+
+      $this->email_model->remove_from_group($checked_messages, $tag_name);
+      exit('finished');
+   }
+
+   public function debug_sql(){
+      $this->email_model->debug_sql();
+      exit("FINISHED");
+   }
    public function delete_messages(){
       $checked_messages = $this->input->post('checked_messages');
       if(!empty($checked_messages))

@@ -1,17 +1,17 @@
 <div class="container">
 
-<?php $first = reset($reply_chain);?>
-<?php $last = end($reply_chain);?>
-<?php if(count($reply_chain) > 1):?>
+<?php $first = reset($emails);?>
+<?php $last = end($emails);?>
+<?php if(count($emails) > 1):?>
 <div class="list-group">
-<?php foreach($reply_chain as $key=>$reply):?>
+<?php foreach($emails as $key=>$email):?>
 
 
 <div class='list-group-item'>
-   <div class='message' data-href='<?php echo base_url().'email/retrieve_message/'.$reply->uid?>' id='<?php echo $reply->uid?>'><?php echo $reply->subject?></br></div>
+   <div class="msg-body"id=<?php echo $email->access_id;?>><?php echo $email->body?></div>
 
-   <?php if(isset($reply->in_reply_to)):?>
-      <i class="glyphicon glyphicon-plus hidden" id='icon-<?php echo $reply->uid;?>'data-toggle='collapse' href='#<?php echo $reply->uid."_reply-chain"?>'></i><br/>
+   <?php if(isset($email->parent)):?>
+      <i class="glyphicon glyphicon-plus hidden" id='icon-<?php echo $email->access_id;?>'data-toggle='collapse' href='#<?php echo $email->access_id."-email-chain"?>'></i><br/>
    <?php endif;?>
 </div>
 <?php endforeach;?>
@@ -19,7 +19,7 @@
 </div>
 <?else:?>
 
-<?php echo $body ?>
+<?php echo $first->body ?>
 <?endif;?>
 <?php 
 if($first)

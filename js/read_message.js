@@ -17,40 +17,31 @@ $(document).ready(function(){
          $(this).addClass('glyphicon-minus');
       }
    });
+   $('.msg-body').each(function(){
+      var gmail   = $(this).find("div[class*='gmail']");
+      var block   = $(this).find("blockquote");
+      if(gmail.length)
+      {
+         gmail.first().removeClass('in');
+
+         gmail.first().addClass('collapse');
+      }
+      if(block.length){
+         block.first().removeClass('in');
+
+         block.first().addClass('collapse');
+      }
+
+      var collapse = $(this).find(".collapse");
+      if(collapse.length){
+         var id = $(this).attr('id')+'-email-chain';
+         console.log(id);
+         console.log(this);
+         collapse.first().attr('id', id);
+         $(this).find(".collapse:gt(0)").removeClass("collapse");
+         $(this).next().removeClass("hidden");
+      }
+   });
 });
-function Retrieve_Message(el, action)
-{
-   console.log(el);
-   $.ajax({
-      method: 'GET',
-      url:action,
-      success:function(data){
-         console.log('success');
-         $(el).html(data);
-         //I"ll probably do this whole thing differently in the future.
-         $(el).ready(function(){
-            var gmail   = $(el).find("div[class*='gmail']");
-            var block   = $(el).find("blockquote");
-            if(gmail.length)
-            {
-               gmail.first().removeClass('in');
 
-               gmail.first().addClass('collapse');
-            }
-            if(block.length){
-               block.first().removeClass('in');
-
-               block.first().addClass('collapse');
-            }
-
-            var collapse = $(el).find(".collapse");
-            if(collapse.length){
-               collapse.first().attr('id', $(el).attr('id')+'_reply-chain');
-               $(el).find(".collapse:gt(0)").removeClass("collapse");
-               $(el).next().removeClass("hidden");
-            }
-         });
-         }
-      });
-};
 

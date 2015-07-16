@@ -1,28 +1,53 @@
 <div class="container">
 
+<!-- Add new tag -->
+<?php echo form_open('email/new_tag', array('role' => 'form', 'class' => 'form-inline'))?>
+   <input class="form-control" type="text" name="tag_name" placeholder="Tag Name"></input>
+   <button class="btn btn-default" type="submit" name="submit">Submit</button>
+</form>
+<!-- Add new tag -->
+
+<!-- Tag Set -->
+<?php if($groups !== FALSE && count($groups) > 0):?>
+   <div class="form-inline form-group">
+      <select class="form-control" id="group-sel">
+      <?php foreach($groups as $group):?>
+         <option><?php echo $group->tag_name?></option>
+      <?php endforeach;?>
+      </select>
+      <button class="btn btn-default" id="add-group-button">Add</button>
+      <button class="btn btn-default" id="del-group-button">Remove</button>
+   </div>
+<?php endif;?>
+<!-- Tag Set -->
+
+<!-- Search form -->
+<?php echo form_open('email/search', array('role' => 'form', 'class' => 'form-inline'))?>
+<div class="form-group">
+   <label class="sr-only" for="search_text">Search: </label>
+   <input class="form-control" type="text" name="search_text" placeholder="Search.."></input>
+</div>
+<button class="btn btn-default" type="submit" name="submit">Go</button>
+</form>
+<!-- Search form -->
 
 <!--Inbox table  -->
 Select all: <input type="checkbox" id="select-all"></input>
 <table style='table-layout:fixed;' class="table table-striped table-hover table-condensed">
    <thead>
-      <!-- <th class="col&#45;xs&#45;2"></th> -->
-      <!-- <th>Date Received</th> -->
-      <!-- <th>From</th> -->
-      <!-- <th>Subject</th> -->
-      <!-- <th></th> -->
    </thead>
    <tbody>
 
    <?php foreach($emails as $email):?>
 <?php
-      $uid = trim($email->uid);
+      $access_id = trim($email->access_id);
 
       echo "<tr>
-         <td><input type='checkbox' class='checkbox select-row' data-Msgno='$uid'</td>
+         <td><input type='checkbox' class='checkbox select-row' data-msgno='$access_id'</td>
 
-         <td style='cursor:pointer;' class='date-row clickable-row' data-date='$email->date' data-href='".base_url('email')."/read_message/$uid'></td>
-         <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$uid'>$email->from</td>
-         <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$uid'>$email->subject</td>
+         <td style='cursor:pointer;' class='date-row clickable-row' data-href='".base_url('email')."/read_message/$access_id'>$email->date</td>
+         <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$access_id'>$email->from</td>
+         <td style='cursor:pointer;' class='clickable-row' data-href='".base_url('email')."/read_message/$access_id'>$email->subject</td>
 
 
          </tr>";

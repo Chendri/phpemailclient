@@ -3,6 +3,7 @@ class Email_model extends CI_Model{
    public function __construct(){
       $this->load->helper('email');
       $this->load->library('session');
+      $this->load->database();
    }
    public function open_stream(){
       if(!isset($this->session->all_client))
@@ -16,22 +17,14 @@ class Email_model extends CI_Model{
    }
 
    public function fetch_inbox(){
-      $this->open_stream();
-      $client = $this->session->inbox_client;
-      return fetch_inbox($client);
+      $search = '';
+      $search = $this->session->search;
+      return fetch_inbox($search);
    }
 
-   public function read_message($uid){
-      $this->open_stream();
+   public function read_message($msgid){
 
-      $client = $this->session->all_client;
-
-      $header                   = imap_fetch_overview($client, $uid, FT_UID)[0];
-      $data['body']             = $this->retrieve_message($uid, $client);
-      $data['header']           = $header;
-
-      $data['reply_chain']      = check_conversation($header, $client);
-
+      $data['emails'] = get_conversation($msgid);
       return $data; 
    }
    public function retrieve_message($uid, $client=null){
@@ -78,6 +71,69 @@ class Email_model extends CI_Model{
       delete_messages(open_inbox(), $checked_messages);
    }
 
+   public function search($search)
+   {
+      $this->session->search = $search;
+   }
+
+   public function fetch_groups()
+   {
+      $query = $this->db->get('email_tags');
+
+      if($query->num_rows() > 0)
+      {
+         return $query->result();
+      }
+      else
+      {
+         return FALSE;
+      }
+   }
+   public function new_tag($tag_name)
+   {
+      return $this->db->insert('email_tags', array('tag_name' => $tag_name));
+   }
+
+   public function add_to_group($checked_messages, $tag_name)
+   {
+      foreach($checked_messages as $access_id)
+      {
+         $result = perform_query('messages', array('access_id' => $access_id));
+         if($result !== FALSE)
+         {
+            $result = perform_query('email_tags', array('tag_name' => $tag_name));
+            if($result !== FALSE)
+            {
+               $tag = reset($result);
+               $tag_id = $tag->id;
+               $this->db->insert('email_tag_x', array('access_id' => $access_id, 'tag_id' => $tag_id));
+            }
+         }
+      }
+   }
+   public function remove_from_group($checked_messages, $tag_name)
+   {
+      foreach($checked_messages as $access_id)
+      {
+         //TODO:Make the query more specific to removal, could be faster.
+         $result = perform_query('messages', array('access_id' => $access_id));
+         if($result !== FALSE)
+         {
+            $result = perform_query('email_tags', array('tag_name' => $tag_name));
+            if($result !== FALSE)
+            {
+               $tag = reset($result);
+               $tag_id = $tag->id;
+               $this->db->where(array('access_id' => $access_id, 'tag_id' => $tag_id));
+               $this->db->delete('email_tag_x');
+            }
+         }
+      }
+   }
+   public function debug_sql()
+   {
+      check_messages('ALL');
+   }
    public function get_debug_info($id)
    {
       $this->open_stream();
