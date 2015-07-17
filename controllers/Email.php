@@ -12,12 +12,13 @@ class Email extends MY_Controller{
       $data['groups'] = $this->email_model->fetch_groups();
       $this->load->view('email/inbox', $data);
    }
-   
+
    public function debug($id = 0){
       $data = $this->email_model->get_debug_info($id);
 
       $this->load->view('email/debug', $data);
    }
+
    public function write_message()
    {
       $this->load->view('email/write_message');
@@ -118,7 +119,7 @@ class Email extends MY_Controller{
 
          $this->email_model->search($search);
 
-         $this->index();
+         redirect('email', 'refresh');
       }
    }
    public function new_tag(){
@@ -136,7 +137,7 @@ class Email extends MY_Controller{
 
          if($this->email_model->new_tag($tag_name))
          {
-            $this->index();
+            redirect('email', 'refresh');
          }
          else{
             exit('Something went wrong');
@@ -160,6 +161,33 @@ class Email extends MY_Controller{
       exit('finished');
    }
 
+   public function check_messages(){
+      $this->email_model->check_messages();
+      redirect('email', 'refresh');
+   }
+   public function get_group_members(){
+      $tag_name = $this->input->get('tag_name');
+      $data = $this->email_model->get_group_members($tag_name);
+      if($data !== FALSE)
+      {
+         exit(JSON_encode($data));
+      }
+      else
+      {
+         exit("NOMATCH");
+      }
+   }
+   public function new_count(){
+      $count = $this->email_model->new_count();
+      if($count > 0)
+      {
+         exit(JSON_encode($count));
+      }
+      else
+      {
+         exit("NONEW");
+      }
+   }
    public function debug_sql(){
       $this->email_model->debug_sql();
       exit("FINISHED");

@@ -37,38 +37,39 @@ class Email_model extends CI_Model{
 
       return fetch_message($client,$uid);
    }
+
    public function send_message($to, $subject, $content)
    {
-      $this->open_stream();
-
       $file_path = process_attachments();
+      $mail = compose_message($to, $subject, $content, $file_path);
 
-      $results = compose_message($to, $subject, $content, $file_path); 
-
-      $message = $results['message'];
-      $headers = $results['headers'];
-
-      return(mail($to, $subject, $message, $headers));
+      if(!$mail->send()){
+         exit("problemo");
+      }else{
+         return(true);
+      }
    }
+
    public function send_reply($to, $subject, $content, $reply_id)
    {
-      $this->open_stream();
+      // $this->open_stream();
 
       $file_path = process_attachments();
 
-      $results = compose_message($to, $subject, $content, $file_path, $reply_id); 
+      $mail = compose_message($to, $subject, $content, $file_path, $reply_id);
 
-      $message = $results['message'];
-      $headers = $results['headers'];
-
-      return(mail($to, $subject, $message, $headers));
+      if(!$mail->send()){
+         exit("problemo");
+      }else{
+         return(true);
+      }
    }
 
    public function delete_messages($checked_messages)
    {
       $this->open_stream();
 
-      delete_messages(open_inbox(), $checked_messages);
+      delete_messages($checked_messages);
    }
 
    public function search($search)
@@ -129,6 +130,25 @@ class Email_model extends CI_Model{
             }
          }
       }
+   }
+   public function get_group_members($tag_name)
+   {
+      $query = $this->db->query("SELECT m.access_id FROM messages m INNER JOIN email_tag_x x ON m.access_id = x.access_id INNER JOIN email_tags t ON x.tag_id = t.id WHERE t.tag_name='$tag_name'");
+      if($query->num_rows() > 0)
+      {
+         return $query->result();
+      }
+      else
+      {
+         return FALSE;
+      }
+   }
+   public function new_count(){
+      return $this->db->query('SELECT status FROM messages WHERE status=1')->num_rows();
+   }
+   public function check_messages()
+   {
+      check_messages();
    }
    public function debug_sql()
    {

@@ -1,5 +1,6 @@
 <?php
 require 'application/third_party/EmailMessage.php';
+require 'application/vendor/autoload.php';
 //TODO Have the email client read off of some config file only reachable by the server
 if(!function_exists("get_login_info"))
 {
@@ -74,11 +75,12 @@ if(!function_exists('search'))
       }
 
       $CG = get_instance();
-      $CG->db->like('from', $search);
+      $CG->db->or_like('from_address', $search);
+      $CG->db->or_like('from_name', $search);
       $CG->db->or_like('to', $search);
       $CG->db->or_like('subject', $search);
       $CG->db->or_like('email_tags.tag_name', $search);
-      $CG->db->join('email_tag_x', 'email_tag_x.access_id = messages.access_id');
+      $CG->db->join('email_tag_x', 'email_tag_x.access_id = m.access_id');
       $CG->db->join('email_tags', 'email_tags.id = email_tag_x.tag_id');
    }
 }
@@ -117,13 +119,17 @@ if(!function_exists('add_to_inbox'))
    {
       $CG = get_instance();
 
+      $from = $header->from;
+      preg_match('/[^<\s]+@.*.com/', $from, $from_address);
+      $from = preg_replace('/\<.+@.*\>/','', $from);
       $data = array(
          'uid'          => $header->uid,
          'message_id'   => $header->message_id,
          'body'         => quoted_printable_decode($body),
          'subject'      => $header->subject,
-         'date'         => date("Y-m-d H:i:s",strtotime($header->date)),
-         'from'         => $header->from,
+         'date'         => $header->date,
+         'from_name'    => $from,
+         'from_address' => $from_address[0],
          'to'           => $header->to
       );
       $to_fix = array();
@@ -168,8 +174,8 @@ if(!function_exists('add_to_inbox'))
 
       $CG->db->insert('messages', $data);
       $id = $CG->db->insert_id();
+      $CG->db->insert('email_tag_x', array('access_id' => $id));
 
-      $CG->db->insert('email_tag_x', array('access_id' => $id, 'tag_id' => 1));
    }
 }
 
@@ -179,14 +185,29 @@ if(!function_exists("fetch_inbox"))
    {
       $CG = get_instance();
 
-      $CG->db->where('parent', null);
-      $CG->db->from('messages');
-
+      $CG->db->select("* 
+                        FROM(
+                        SELECT a.status, a.message_id, a.access_id, a.subject, a.from_name, a.from_address, a.to, a.body, b.format_date as date
+                        FROM messages a
+                        INNER JOIN(
+                           SELECT max(date) as format_date, parent
+                           FROM messages 
+                           GROUP BY
+                              parent
+                        ) b
+                        on a.parent = b.parent
+                        and
+                        a.date = b.format_date
+                        UNION
+                        SELECT m.status, m.message_id, m.access_id, m.subject, m.from_name, m.from_address, m.to, m.body, m.date as date
+                        FROM messages m
+                        WHERE message_id NOT IN (SELECT distinct parent FROM messages WHERE parent IS NOT NULL) AND parent IS NULL) m", FALSE);
       if(!empty($search))
       {
          search($search);
       }
 
+      $CG->db->order_by('access_id DESC ');
       $query = $CG->db->get();
       if($query->num_rows() > 0)
       {
@@ -214,15 +235,26 @@ if(!function_exists("get_conversation"))
 
       if(entry_exists('messages', 'access_id', $access_id))
       {
-         $msgid = $CG->db->get_where('messages', array('access_id'=> $access_id))->row()->message_id;
+         $message = $CG->db->get_where('messages', array('access_id'=> $access_id))->row();
+         if(!is_null($message->parent))
+         {
+            $msgid = $CG->db->get_where('messages', array('message_id' => $message->parent))->row()->message_id;
+         }
+         else{
+            $msgid = $message->message_id;
+         }
 
          $CG->db->where('parent', $msgid);
          $CG->db->or_where('message_id', $msgid);
-         $CG->db->order_by('date ASC');
+         $CG->db->order_by("STR_TO_DATE(date, '%a,%e%b%Y%T') ASC");
          $query = $CG->db->get('messages');
 
          if($query->num_rows() > 0)
          {
+            $CG->db->where('parent', $msgid);
+            $CG->db->or_where('message_id', $msgid);
+            $CG->db->set('status', 0);
+            $CG->db->update('messages');
             return $query->result();
          }
          else
@@ -290,28 +322,43 @@ if(!function_exists('mark_for_deletion'))
 
             if(isset($email->uid))
             {
-               //Delete it off the server
-               imap_delete($client, $email->uid, FT_UID);
-
+               if(!is_null($email->parent))
+               {
+                  $email = $CG->db->get_where('messages', array('message_id' => $email->parent))->row();
+               }
                //Delete message and all its children
-               $CG->db->where('access_id', $message);
+               $CG->db->start_cache();
+               $CG->db->where('access_id', $email->access_id);
                $CG->db->or_where('parent', $email->message_id);
+               $CG->db->stop_cache();
+
+               $CG->db->select('access_id, uid');
+               $results = $CG->db->get('messages')->result();
                $CG->db->delete('messages');
 
+               $CG->db->flush_cache();
+
+               $uid_list = '';
                //Delete message's tag lookups
-               //TODO:Delete message's children's tag lookups
-               $CG->db->where('access_id', $message);
-               $CG->db->delete('email_tag_x');
+               foreach($results as $message)
+               {
+                  $uid_list .= ','.$message->uid;
+                  $CG->db->where('access_id', $message->access_id);
+                  $CG->db->delete('email_tag_x');
+               }
+               imap_mail_move($client, $uid_list, '[Gmail]/Trash', CP_UID);
             }
          }
       }
+      imap_expunge($client);
    }
 }
 
 if(!function_exists('delete_messages'))
 {
-   function delete_messages($client, $checked_messages = '')
+   function delete_messages($checked_messages = '')
    {
+      $client = open_all();
       //NOTE:Client must ALWAYS be the client used to store UID's on the database, otherwise
       //this function may delete the wrong messages
       if(!empty($checked_messages))
@@ -357,90 +404,73 @@ if(!function_exists("process_inline"))
 
 if(!function_exists("compose_message"))
 {
-   function compose_message($to, $subject, $content, $path = '', $is_reply = false, $cc = '', $bcc = '', $_headers = false)
+   function compose_message($to, $subject, $content, $path = '', $is_reply = false, $cc = '', $bcc = '')
    {
-      $rn = "\r\n";
+      $info = get_login_info();
 
-      $boundary         = md5(rand());
-      $boundary_content = md5(rand());
+      $mail = new PHPMailer;
 
-      //Set up headers
-      $headers  = 'From: example Client Test  <example@gmail.com>'.$rn;
-      if($is_reply)
+      $mail->isSMTP();
+
+      $mail->Host = "smtp.gmail.com";
+
+      $mail->Username = $info['username'];
+      $mail->Password = $info['password'];
+
+      $mail->Port = 587;
+
+      $mail->SMTPAuth = true;
+
+      $mail->setFrom('example@gmail.com', 'example client');
+      $mail->addReplyTo('example@gmail.com', 'example client');
+
+      if(is_array($to))
       {
-         $headers .= 'Reply-To: '.$to.$rn;
-         $headers .='In-Reply-To: '.$is_reply.$rn;
+         foreach($to as $recipient)
+         {
+            $mail->addAddress($recipient);
+         }
       }
-      $headers .= 'Mime-version: 1.0'.$rn;
-      $headers .= 'Content-Type: multipart/related;boundary='.$boundary.$rn;
-
-      if(!empty($cc))
+      else
       {
-         $headers .= 'Cc: '.$cc.$rn;
+         $mail->addAddress($to);
       }
 
-      if(!empty($bcc))
+      if($is_reply !== FALSE)
       {
-         $headers .= 'Bcc: '.$bcc.$rn;
+         $mail->AddCustomHeader("In-Reply-To: " . $is_reply);
       }
-
-      $headers .= $rn;
-
-      //Set up body
-      $msg  = $rn . '--' . $boundary . $rn;
-      $msg .= 'Content-Type: multipart/alternative;'.$rn;
-      $msg .= " boundary=\"$boundary_content\"".$rn;
-
-
-      //Plain text
-      $msg .= $rn . '--' . $boundary_content  . $rn;
-      $msg .= 'Content-Type: text/plain; charset=ISO-8859-1'.$rn;
-      $msg .= strip_tags($content);
-
-      //HTML
-      $msg .= $rn . '--' . $boundary_content  . $rn;
-      $msg .= 'Content-Type: text/html; charset=ISO-8859-1'.$rn;
-      $msg .= 'Content-Transfer-Encoding: quoted-printable'.$rn;
-
-      if($_headers)
+      if(is_array($path))
       {
-         $msg .= $rn . '<img src=3D"cid:template-H.PNG" />' . $rn;
+         foreach($path as $file)
+         {
+            $mail->addAttachment($file);
+         }
       }
-
-      $msg .= $rn . '<div>' . nl2br(str_replace("=", "=3D", $content)) . '</div>' . $rn;
-      if ($_headers) {
-         $msg .= $rn . '<img src=3D"cid:template-F.PNG" />' . $rn;
-      }
-      $msg .= $rn . '--' . $boundary_content . '--' . $rn;
-
-      //TODO make sure this code is correct, probably  not correct with my system
-      if ($path != '' && file_exists($path)) {
-         $conAttached = prepare_attatchment($path);
-         if ($conAttached !== false) {
-            $msg .= $rn . '--' . $boundary . $rn;
-            $msg .= $conAttached;
+      else
+      {
+         if(!empty($path))
+         {
+            $mail->addAttachment($path);
          }
       }
 
-      if ($_headers) {
-         $imgHead = dirname(__FILE__) . '/../../../../modules/notification/ressources/img/template-H.PNG';
-         $conAttached = prepare_attatchment($imgHead);
-         if ($conAttached !== false) {
-            $msg .= $rn . '--' . $boundary . $rn;
-            $msg .= $conAttached;
-         }
-         $imgFoot = dirname(__FILE__) . '/../../../../modules/notification/ressources/img/template-F.PNG';
-         $conAttached = prepare_attatchment($imgFoot);
-         if ($conAttached !== false) {
-            $msg .= $rn . '--' . $boundary . $rn;
-            $msg .= $conAttached;
-         }
-      }
+      //This is due to certificate issues. TLS is recommended when possible
+      $mail->SMTPOptions = array(
+         'ssl' => array(
+            'verify_peer' => false,
+            'verify_peer_name' => false,
+            'allow_self_signed' => true
+         )
+      );
 
-      $msg .= $rn . '--' . $boundary . '--' . $rn;
+      $mail->Subject = $subject;
 
-      return array('message' => $msg, 
-                   'headers' => $headers);
+      $mail->Body = $content;
+
+      $mail->isHTML(true);
+
+      return $mail;
    }
 }
 
@@ -539,52 +569,3 @@ if(!function_exists('debug_info'))
       return $data;
    }
 }
-
-// function create_thread_structure($client, $limb)
-// {
-//    $root_val = current($limb);
-//    $root_tag = explode('.', key($limb));
-//
-//    $structure = array();
-//    while(next($limb) !== FALSE){
-//       $cur_val = current($limb);
-//       $cur_key = key($limb);
-//       $cur_tag = explode('.', $cur_key);
-//
-//       if($cur_tag[1] == 'branch')
-//       {
-//          if($cur_val && $cur_val != 19)
-//          {
-//             $end_branch_key = $cur_tag[0].'.num';
-//             $key_array = array_keys($limb);
-//
-//             $offset = array_search($cur_key, $key_array);
-//
-//             $branch_key_subest = array_slice($key_array, $offset, (array_search( $end_branch_key, $key_array)-$offset)+1);
-//
-//             $sub_limb = array_intersect_key($limb, array_flip($branch_key_subest));
-//
-//
-//             array_unshift($structure,create_thread_structure($client, $sub_limb));
-//
-//             $limb = array_diff_key($limb, $sub_limb);
-//
-//          }
-//       }
-//       elseif($cur_tag[1] == 'num')
-//       {
-//
-//          array_unshift($structure, imap_headerinfo($client, $cur_val));
-//
-//          unset($limb[$cur_key]);
-//          reset($limb);
-//
-//          if($cur_tag[0] == $root_tag[0])
-//          {
-//             return $structure;
-//          }
-//       }
-//    }
-//    return $structure;
-// }
-

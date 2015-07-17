@@ -24,13 +24,11 @@
 <?php 
 if($first)
 {
-   preg_match('/\<([^<>]+)\>/', $first->from, $match);
-   $to = preg_replace('/[<>]+/', '', $match[0]);
+   $to = $first->from_address;
 }
 else
 {
-   preg_match('/\<([^<>]+)\>/', $header->from, $match);
-   $to = preg_replace('/[<>]+/', '', $match[0]);
+   $to = $header->from_address;
    $last = $header;
    $first = $header;
 }
